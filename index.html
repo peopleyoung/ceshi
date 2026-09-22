@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>贪吃蛇 · Snake</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --board: #111c33;
+    --grid: #1e293b;
+    --snake: #34d399;
+    --head: #a7f3d0;
+    --food: #f472b6;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 12px;
+  }
+  .wrap { width: min(480px, 100%); }
+  .hud {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .hud div {
+    flex: 1;
+    background: var(--board);
+    border: 1px solid var(--grid);
+    border-radius: 8px;
+    padding: 6px 8px;
+    text-align: center;
+  }
+  .hud span { display: block; }
+  .hud .label { color: var(--muted); font-size: 11px; letter-spacing: .08em; }
+  .hud .value { font-size: 18px; font-variant-numeric: tabular-nums; }
+  .board {
+    position: relative;
+    border: 1px solid var(--grid);
+    border-radius: 8px;
+    overflow: hidden;
+    touch-action: none;
+  }
+  canvas { display: block; width: 100%; height: auto; }
+  .hint {
+    margin: 8px 0 0;
+    color: var(--muted);
+    text-align: center;
+    min-height: 20px;
+  }
+  .panel {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(15, 23, 42, .82);
+    text-align: center;
+  }
+  .panel.show { display: flex; }
+  .panel h2 { margin: 0; font-size: 24px; }
+  .panel p { margin: 0; color: var(--muted); }
+  .panel strong { color: var(--text); font-variant-numeric: tabular-nums; }
+  .panel button {
+    margin-top: 8px;
+    padding: 8px 18px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--bg);
+    background: var(--snake);
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .panel button:focus-visible { outline: 2px solid var(--head); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="hud">
+    <div><span class="label">分数</span><span class="value" id="score">0</span></div>
+    <div><span class="label">最高分</span><span class="value" id="high">0</span></div>
+    <div><span class="label">节拍</span><span class="value" id="speed">150ms</span></div>
+  </div>
+  <div class="board" id="board">
+    <canvas id="stage" width="480" height="360" aria-label="贪吃蛇棋盘"></canvas>
+    <div class="panel" id="panel" role="dialog" aria-live="polite">
+      <h2 id="panel-title">游戏结束</h2>
+      <p>本局分数 <strong id="panel-score">0</strong></p>
+      <p>最高分 <strong id="panel-high">0</strong></p>
+      <p class="label">Enter / R / 点击下方按钮重开</p>
+      <button type="button" id="again">再来一局</button>
+    </div>
+  </div>
+  <p class="hint" id="hint" aria-live="polite">按方向键开始</p>
+</main>
+<script src="js/snake.js"></script>
+<script>
+(function () {
+  'use strict';
+  var CELL = 24;
+  var K = SnakeGame.constants;
+  var stage = document.getElementById('stage');
+  var ctx = stage.getContext('2d');
+  var el = {
+    score: document.getElementById('score'),
+    high: document.getElementById('high'),
+    speed: document.getElementById('speed'),
+    hint: document.getElementById('hint'),
+    panel: document.getElementById('panel'),
+    panelTitle: document.getElementById('panel-title'),
+    panelScore: document.getElementById('panel-score'),
+    panelHigh: document.getElementById('panel-high'),
+    board: document.getElementById('board')
+  };
+  stage.width = K.COLS * CELL;
+  stage.height = K.ROWS * CELL;
+
+  var HIGH_KEY = 'snake.highscore';
+  function loadHigh() {
+    try {
+      var v = parseInt(localStorage.getItem(HIGH_KEY), 10);
+      return v > 0 ? v : 0;
+    } catch (err) {
+      return 0;
+    }
+  }
+  function saveHigh(v) {
+    try {
+      localStorage.setItem(HIGH_KEY, String(v));
+    } catch (err) {
+      /* private mode: keep the session value only */
+    }
+  }
+
+  var highScore = loadHigh();
+  var game = SnakeGame.createGame({});
+  var rafId = null;
+  var lastTs = 0;
+  var acc = 0;
+
+  var KEYS = {
+    ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
+    ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right'
+  };
+  var HINTS = {
+    IDLE: '按方向键开始',
+    RUNNING: '',
+    PAUSED: '已暂停 · 按空格继续',
+    OVER: '按 Enter / R 重开',
+    WIN: '通关了！按 Enter / R 重开'
+  };
+
+  function draw() {
+    ctx.fillStyle = '#111c33';
+    ctx.fillRect(0, 0, stage.width, stage.height);
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
+    var x, y;
+    for (x = 1; x < K.COLS; x++) {
+      ctx.beginPath();
+      ctx.moveTo(x * CELL + 0.5, 0);
+      ctx.lineTo(x * CELL + 0.5, stage.height);
+      ctx.stroke();
+    }
+    for (y = 1; y < K.ROWS; y++) {
+      ctx.beginPath();
+      ctx.moveTo(0, y * CELL + 0.5);
+      ctx.lineTo(stage.width, y * CELL + 0.5);
+      ctx.stroke();
+    }
+    if (game.food) {
+      ctx.fillStyle = '#f472b6';
+      ctx.beginPath();
+      ctx.arc(game.food.x * CELL + CELL / 2, game.food.y * CELL + CELL / 2, CELL / 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (var i = game.snake.length - 1; i >= 0; i--) {
+      var cell = game.snake[i];
+      ctx.fillStyle = i === 0 ? '#a7f3d0' : '#34d399';
+      ctx.fillRect(cell.x * CELL + 2, cell.y * CELL + 2, CELL - 4, CELL - 4);
+    }
+  }
+
+  function sync() {
+    el.score.textContent = game.score;
+    el.high.textContent = highScore;
+    el.speed.textContent = game.intervalMs + 'ms';
+    el.hint.textContent = HINTS[game.status];
+    var ended = game.status === 'OVER' || game.status === 'WIN';
+    el.panel.classList.toggle('show', ended);
+    if (ended) {
+      el.panelTitle.textContent = game.status === 'WIN' ? '胜利' : '游戏结束';
+      el.panelScore.textContent = game.score;
+      el.panelHigh.textContent = highScore;
+    }
+  }
+
+  function commitHigh() {
+    if (game.score > highScore) {
+      highScore = game.score;
+      saveHigh(highScore);
+    }
+  }
+
+  function tick() {
+    game.step();
+    commitHigh();
+    draw();
+    sync();
+  }
+
+  function loop(ts) {
+    rafId = requestAnimationFrame(loop);
+    if (game.status !== 'RUNNING') {
+      lastTs = ts;
+      acc = 0;
+      return;
+    }
+    if (!lastTs) lastTs = ts;
+    // Clamping keeps a backgrounded tab from replaying missed ticks at once.
+    acc += Math.min(ts - lastTs, game.intervalMs * 2);
+    lastTs = ts;
+    while (acc >= game.intervalMs) {
+      acc -= game.intervalMs;
+      tick();
+      if (game.status !== 'RUNNING') break;
+    }
+  }
+
+  function boot() {
+    draw();
+    sync();
+    if (rafId === null) {
+      rafId = requestAnimationFrame(loop);
+    }
+  }
+
+  function steer(dir) {
+    if (game.status === 'IDLE') {
+      game.start(dir);
+      lastTs = 0;
+      acc = game.intervalMs;
+      sync();
+    } else if (game.status === 'RUNNING') {
+      game.turn(dir);
+    }
+  }
+
+  function restart() {
+    if (game.status !== 'OVER' && game.status !== 'WIN') return;
+    game.restart();
+    boot();
+  }
+
+  function togglePause() {
+    if (game.status === 'RUNNING') game.pause();
+    else if (game.status === 'PAUSED') game.resume();
+    else return;
+    sync();
+  }
+
+  document.addEventListener('keydown', function (event) {
+    var code = event.code;
+    if (KEYS[code] || code === 'Space' || code === 'Enter' || code === 'KeyR') {
+      event.preventDefault();
+    }
+    if (KEYS[code]) steer(KEYS[code]);
+    else if (code === 'Space') togglePause();
+    else if (code === 'Enter' || code === 'KeyR') restart();
+  });
+
+  el.board.addEventListener('click', function (event) {
+    if (event.target === document.getElementById('again')) restart();
+  });
+  var touchStart = null;
+  el.board.addEventListener('touchstart', function (event) {
+    var t = event.touches[0];
+    if (t) touchStart = { x: t.clientX, y: t.clientY };
+  }, { passive: true });
+  el.board.addEventListener('touchmove', function (event) {
+    event.preventDefault();
+  }, { passive: false });
+  el.board.addEventListener('touchend', function (event) {
+    if (!touchStart) return;
+    var t = event.changedTouches[0];
+    var dx = t.clientX - touchStart.x;
+    var dy = t.clientY - touchStart.y;
+    touchStart = null;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    steer(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    lastTs = 0;
+    acc = 0;
+  });
+  window.addEventListener('pagehide', function () {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>
