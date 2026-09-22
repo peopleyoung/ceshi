@@ -73,11 +73,12 @@
     if (shown.best !== state.best) {
       shown.best = state.best;
       els.best.textContent = String(state.best);
+      // 刷新即丢失会违反 AC-14，故破纪录当刻就落盘，而不是只在结束时写
+      if (state.best > 0) saveBest(state.best);
     }
     if (shown.status !== state.status) {
       shown.status = state.status;
       els.status.textContent = LABEL[state.status];
-      if (state.status === STATES.GAME_OVER || state.status === STATES.WON) saveBest(state.best);
     }
   }
 
