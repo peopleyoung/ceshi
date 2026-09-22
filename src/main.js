@@ -23,9 +23,11 @@
 
   // 棋盘尺寸可由 ?cols=&rows= 覆盖，仅为测试构造小棋盘复测满盘胜利（AC-10），默认严格 20x15
   function readSize(name, fallback) {
-    const raw = Number(new URLSearchParams(window.location.search).get(name));
-    if (!Number.isFinite(raw)) return fallback;
-    return Math.min(40, Math.max(5, Math.floor(raw)));
+    const raw = new URLSearchParams(window.location.search).get(name);
+    if (raw === null || raw.trim() === '') return fallback;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return fallback;
+    return Math.min(40, Math.max(5, Math.floor(value)));
   }
 
   function loadBest() {
