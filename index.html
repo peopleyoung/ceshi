@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>贪吃蛇 · Snake</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #020617;
+    --panel: #0f172a;
+    --line: #1e293b;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #22c55e;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 12px 28px;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 20px;
+    letter-spacing: 2px;
+  }
+
+  .hud {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .hud b { color: var(--accent); font-weight: 700; }
+
+  .board-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    touch-action: none;
+  }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 16px;
+    text-align: center;
+    border-radius: 10px;
+    background: rgba(2, 6, 23, 0.82);
+  }
+
+  .overlay[hidden] { display: none; }
+
+  .overlay h2 { margin: 0; font-size: 22px; }
+
+  .overlay p { margin: 0; color: var(--muted); }
+
+  .controls {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  button {
+    flex: 1 1 auto;
+    padding: 9px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  button:hover { border-color: var(--accent); }
+
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .tips {
+    width: 100%;
+    max-width: 480px;
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+  <h1>贪吃蛇</h1>
+
+  <div class="hud">
+    <span>分数 <b id="score">0</b></span>
+    <span>最高分 <b id="best">0</b></span>
+    <span>状态 <b id="status">待开始</b></span>
+  </div>
+
+  <div class="board-wrap">
+    <canvas id="board" width="480" height="360" role="img" aria-label="贪吃蛇棋盘"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">贪吃蛇</h2>
+      <p id="overlayText">按任意方向键开始</p>
+      <button id="primaryBtn" type="button">开始游戏</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="pauseBtn" type="button">暂停 / 继续（空格）</button>
+    <button id="restartBtn" type="button">重新开始（R）</button>
+  </div>
+
+  <p class="tips">
+    方向键或 W/A/S/D 转向，空格或 P 暂停/继续，Enter 或 R 重新开始；手机上四方向滑动即可转向。
+    棋盘 20&times;15，吃到食物 +10 分、蛇长 +1，每 50 分提速一档（下限 80ms/格），撞墙或撞到自己即结束。
+  </p>
+
+  <script src="src/game.js"></script>
+  <script src="src/render.js"></script>
+  <script src="src/main.js"></script>
+</body>
+</html>
