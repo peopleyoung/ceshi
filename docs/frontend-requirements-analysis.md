@@ -1,13 +1,13 @@
 # 前端需求分析：产品级 Web 贪吃蛇小游戏 V1
 
-> 版本：1.1  
+> 版本：1.2  
 > 作者：前端开发工程师（数字员工）  
 > 日期：2026-09-28  
 > 状态：已确认，可交付  
-> 当前派发：dispatch 10017 / attempt 11  
-> 上游 PRD：`agents/product-manager` 分支，SHA `b0a4b0e`，文件 `docs/PRD.md`  
-> 上游后端分析：`agents/backend-developer` 分支，SHA `94132e5cacd0464e1a5b83fe52963fc038e716ce`，文件 `docs/backend-requirements-analysis.md`  
-> 权威基线 HEAD：`94132e5cacd0464e1a5b83fe52963fc038e716ce`
+> 当前派发：dispatch 10020 / attempt 13  
+> 上游 PRD：`agents/product-manager` 分支，SHA `b0a4b0ece01f9ca1751deb7eba18291b07de7aa0`，文件 `docs/PRD.md`  
+> 上游后端分析：`agents/backend-developer` 分支，SHA `0b0d9ef6f2c618a45505070d2895441595112e08`，文件 `docs/backend-requirements-analysis.md`  
+> 权威基线 HEAD：`0b0d9ef6f2c618a45505070d2895441595112e08`
 
 ---
 
@@ -30,12 +30,12 @@
 
 ### 1.4 跨角色交叉确认
 
-经审阅产品经理 PRD（`agents/product-manager`，SHA `b0a4b0e`）与后端开发工程师分析（`agents/backend-developer`，SHA `94132e5`），确认：
+经审阅产品经理 PRD（`agents/product-manager`，SHA `b0a4b0e`）与后端开发工程师分析（`agents/backend-developer`，SHA `0b0d9ef`），确认：
 - 本任务为**纯前端静态站点**，无需后端服务
 - PRD 中 8 项验收标准均可通过前端实现完成
 - 后端开发工程师已确认后端任务为 0，前端 8 项任务 + 测试 6 项任务的拆分合理
 - PRD 中的接口契约草案（GameEngine、StorageService、InputHandler）可作为前端模块划分的参考
-- 后端分析（v1.1，dispatch 10017 上下文）与本文档结论一致：无后端依赖、风险可控、验收标准均可由前端/测试阶段保证
+- 后端分析（v1.2，dispatch 10020 上下文）与本文档结论一致：无后端依赖、风险可控、验收标准均可由前端/测试阶段保证
 
 ---
 
