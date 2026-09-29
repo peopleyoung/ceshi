@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>审核详情 - 标书审核平台</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="app-header" id="app-header"></header>
+
+  <div class="container">
+    <div style="margin-bottom:16px">
+      <a href="/dashboard.html" style="font-size:14px">&larr; 返回任务列表</a>
+    </div>
+
+    <div id="content">
+      <div class="loading-spinner">
+        <div class="spinner-ring"></div>
+        <span class="loading-text">加载中...</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error('unauthorized');
+    renderHeader('dashboard');
+
+    const content = document.getElementById('content');
+    const params = new URLSearchParams(window.location.search);
+    const taskId = params.get('id');
+
+    if (!taskId) {
+      content.innerHTML = '<div class="alert alert-danger">缺少任务 ID</div>';
+    }
+
+    async function loadDetail() {
+      try {
+        const data = await api.reviews.get(taskId);
+        const { task, results } = data;
+
+        if (task.status === 'pending' || task.status === 'parsing' || task.status === 'reviewing') {
+          renderProcessing(task);
+          setTimeout(loadDetail, 3000);
+          return;
+        }
+
+        if (task.status === 'failed') {
+          renderFailed(task);
+          return;
+        }
+
+        renderResults(task, results);
+      } catch (err) {
+        content.innerHTML = `
+          <div class="alert alert-danger">
+            加载失败：${escapeHtml(err.message)}
+            <a href="/dashboard.html" class="btn btn-sm btn-outline" style="margin-left:auto">返回列表</a>
+          </div>`;
+      }
+    }
+
+    function renderProcessing(task) {
+      content.innerHTML = `
+        <div class="detail-header">
+          <h2>审核任务 #${task.id}</h2>
+          <div class="detail-meta">
+            <div class="meta-item">
+              <span class="meta-label">状态</span>
+              ${statusBadge(task.status)}
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">当前步骤</span>
+              <span class="meta-value">${escapeHtml(task.currentStep || '处理中')}</span>
+            </div>
+          </div>
+          <div class="progress-bar" style="margin-top:16px">
+            <div class="progress-fill" style="width:${task.progress || 0}%"></div>
+          </div>
+          <div style="font-size:12px;color:var(--text-tertiary)">进度 ${task.progress || 0}%</div>
+        </div>
+        <div class="state-container">
+          <div class="loading-spinner">
+            <div class="spinner-ring"></div>
+            <span class="loading-text">审核进行中，请稍候...</span>
+          </div>
+        </div>`;
+    }
+
+    function renderFailed(task) {
+      content.innerHTML = `
+        <div class="detail-header">
+          <h2>审核任务 #${task.id}</h2>
+          <div class="detail-meta">
+            <div class="meta-item">
+              <span class="meta-label">状态</span>
+              ${statusBadge(task.status)}
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">创建时间</span>
+              <span class="meta-value">${formatDate(task.createdAt)}</span>
+            </div>
+          </div>
+        </div>
+        <div class="alert alert-danger">
+          审核失败：${escapeHtml(task.errorMessage || '未知错误')}
+          <button class="btn btn-sm btn-danger" style="margin-left:auto" onclick="retryTask()">重试</button>
+        </div>`;
+    }
+
+    function renderResults(task, results) {
+      const qual = results?.qualification || [];
+      const disq = results?.disqualification || [];
+      const cert = results?.certificate || [];
+
+      let html = `
+        <div class="detail-header">
+          <h2>审核报告 #${task.id}</h2>
+          <div class="detail-meta">
+            <div class="meta-item">
+              <span class="meta-label">招标文件</span>
+              <span class="meta-value">${escapeHtml(task.tenderFileName)}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">投标文件</span>
+              <span class="meta-value">${escapeHtml(task.bidFileName)}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">投标截止日</span>
+              <span class="meta-value">${task.bidDeadline}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">状态</span>
+              ${statusBadge(task.status)}
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">完成时间</span>
+              <span class="meta-value">${formatDate(task.completedAt)}</span>
+            </div>
+          </div>
+          <div class="detail-actions">
+            <button class="btn btn-outline btn-sm" onclick="exportReport('pdf')">导出 PDF</button>
+            <button class="btn btn-outline btn-sm" onclick="exportReport('word')">导出 Word</button>
+          </div>
+        </div>`;
+
+      html += renderResultSection('资格审查', 'qualification', qual, '📋');
+      html += renderResultSection('废标项检查', 'disqualification', disq, '⚠️');
+      html += renderResultSection('证件有效期', 'certificate', cert, '📅');
+
+      if (qual.length === 0 && disq.length === 0 && cert.length === 0) {
+        html += `
+          <div class="state-container">
+            <div class="state-icon">📭</div>
+            <div class="state-title">无审核结果</div>
+            <div class="state-desc">AI 未返回具体审核项</div>
+          </div>`;
+      }
+
+      content.innerHTML = html;
+    }
+
+    function renderResultSection(title, key, items, icon) {
+      if (!items || items.length === 0) return '';
+
+      let html = `
+        <div class="result-section">
+          <h3>${icon} ${title} <span class="count-badge">${items.length}</span></h3>`;
+
+      for (const item of items) {
+        html += `
+          <div class="result-item">
+            <div class="result-header">
+              <span class="result-title">${escapeHtml(item.title)}</span>
+              ${conclusionBadge(item.conclusion)}
+            </div>
+            ${item.excerpt ? `<div class="result-excerpt">${escapeHtml(item.excerpt)}</div>` : ''}
+            ${item.basis ? `<div class="result-basis">${escapeHtml(item.basis)}</div>` : ''}
+            ${item.confidence != null ? `<div class="confidence">置信度：${Math.round(item.confidence * 100)}%</div>` : ''}
+          </div>`;
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    async function exportReport(format) {
+      try {
+        const filename = `review-report-${taskId}.${format === 'pdf' ? 'pdf' : 'docx'}`;
+        await downloadFile(`/api/reviews/${taskId}/export/${format}`, filename);
+        showToast('导出成功', 'success');
+      } catch (err) {
+        showToast(err.message || '导出失败', 'error');
+      }
+    }
+
+    async function retryTask() {
+      try {
+        await api.reviews.retry(taskId);
+        showToast('任务已重新提交', 'success');
+        loadDetail();
+      } catch (err) {
+        showToast(err.message || '重试失败', 'error');
+      }
+    }
+
+    if (taskId) loadDetail();
+  </script>
+</body>
+</html>

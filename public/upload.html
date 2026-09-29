@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>新建审核 - 标书审核平台</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="app-header" id="app-header"></header>
+
+  <div class="container">
+    <h1 class="page-title">新建审核任务</h1>
+
+    <div id="alert-area"></div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">1. 上传招标文件</h2>
+      </div>
+      <div class="upload-zone" id="tender-zone">
+        <div class="upload-icon">📄</div>
+        <div class="upload-text">点击或拖拽上传招标文件</div>
+        <div class="upload-hint">支持 PDF / DOC / DOCX / PNG / JPG，最大 50MB</div>
+        <input type="file" id="tender-input" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" hidden>
+      </div>
+      <div class="file-list" id="tender-files"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">2. 上传投标文件</h2>
+      </div>
+      <div class="upload-zone" id="bid-zone">
+        <div class="upload-icon">📄</div>
+        <div class="upload-text">点击或拖拽上传投标文件</div>
+        <div class="upload-hint">支持 PDF / DOC / DOCX / PNG / JPG，最大 50MB</div>
+        <input type="file" id="bid-input" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" hidden>
+      </div>
+      <div class="file-list" id="bid-files"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">3. 设置投标截止日期</h2>
+      </div>
+      <div class="form-group">
+        <label for="deadline">截止日期</label>
+        <input type="date" id="deadline" required>
+        <div class="hint">系统将以此日期为基准检查证件有效期</div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-block" id="submit-btn" disabled>
+      提交审核
+    </button>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error('unauthorized');
+    renderHeader('upload');
+
+    const deadlineInput = document.getElementById('deadline');
+    const today = new Date().toISOString().split('T')[0];
+    deadlineInput.min = today;
+    deadlineInput.value = today;
+
+    const submitBtn = document.getElementById('submit-btn');
+    const alertArea = document.getElementById('alert-area');
+
+    let tenderFileId = null;
+    let bidFileId = null;
+
+    function updateSubmitState() {
+      submitBtn.disabled = !(tenderFileId && bidFileId && deadlineInput.value);
+    }
+
+    deadlineInput.addEventListener('change', updateSubmitState);
+
+    function setupUploadZone(zoneId, inputId, listId, onUploaded) {
+      const zone = document.getElementById(zoneId);
+      const input = document.getElementById(inputId);
+      const list = document.getElementById(listId);
+
+      zone.addEventListener('click', () => input.click());
+
+      zone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        zone.classList.add('dragover');
+      });
+
+      zone.addEventListener('dragleave', () => {
+        zone.classList.remove('dragover');
+      });
+
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) {
+          handleFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      input.addEventListener('change', () => {
+        if (input.files.length > 0) {
+          handleFile(input.files[0]);
+          input.value = '';
+        }
+      });
+
+      async function handleFile(file) {
+        const maxSize = 50 * 1024 * 1024;
+        if (file.size > maxSize) {
+          showToast('文件大小超过 50MB 限制', 'error');
+          return;
+        }
+
+        list.innerHTML = `
+          <div class="file-item">
+            <div class="file-info">
+              <span class="file-type-badge">${file.name.split('.').pop().toUpperCase()}</span>
+              <span class="file-name">${escapeHtml(file.name)}</span>
+            </div>
+            <span class="loading-text" style="font-size:13px">上传中...</span>
+          </div>`;
+
+        try {
+          const result = await api.files.upload(file);
+          list.innerHTML = `
+            <div class="file-item">
+              <div class="file-info">
+                <span class="file-type-badge">${result.fileType.toUpperCase()}</span>
+                <span class="file-name">${escapeHtml(result.fileName)}</span>
+                <span class="file-size">${formatFileSize(result.fileSize)}</span>
+              </div>
+              <button class="remove-btn" title="移除">&times;</button>
+            </div>`;
+
+          list.querySelector('.remove-btn').addEventListener('click', () => {
+            list.innerHTML = '';
+            onUploaded(null);
+            updateSubmitState();
+          });
+
+          onUploaded(result.fileId);
+          updateSubmitState();
+          showToast('上传成功', 'success');
+        } catch (err) {
+          list.innerHTML = `
+            <div class="alert alert-danger">
+              上传失败：${escapeHtml(err.message)}
+              <button class="btn btn-sm btn-outline" style="margin-left:auto" onclick="document.getElementById('${inputId}').click()">重试</button>
+            </div>`;
+          onUploaded(null);
+          updateSubmitState();
+        }
+      }
+    }
+
+    setupUploadZone('tender-zone', 'tender-input', 'tender-files', (id) => { tenderFileId = id; });
+    setupUploadZone('bid-zone', 'bid-input', 'bid-files', (id) => { bidFileId = id; });
+
+    submitBtn.addEventListener('click', async () => {
+      alertArea.innerHTML = '';
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner"></span> 提交中...';
+
+      try {
+        await api.reviews.create({
+          tenderFileId,
+          bidFileId,
+          bidDeadline: deadlineInput.value,
+        });
+        showToast('审核任务已创建', 'success');
+        setTimeout(() => { window.location.href = '/dashboard.html'; }, 1000);
+      } catch (err) {
+        const div = document.createElement('div');
+        div.className = 'alert alert-danger';
+        div.textContent = err.message || '提交失败';
+        alertArea.appendChild(div);
+        submitBtn.disabled = false;
+        submitBtn.textContent = '提交审核';
+        updateSubmitState();
+      }
+    });
+  </script>
+</body>
+</html>

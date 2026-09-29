@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>审核任务 - 标书审核平台</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="app-header" id="app-header"></header>
+
+  <div class="container">
+    <div class="toolbar">
+      <h1 class="page-title" style="margin-bottom:0">审核任务</h1>
+      <a href="/upload.html" class="btn btn-primary">新建审核</a>
+    </div>
+
+    <div id="content">
+      <div class="loading-spinner">
+        <div class="spinner-ring"></div>
+        <span class="loading-text">加载中...</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error('unauthorized');
+    renderHeader('dashboard');
+
+    const content = document.getElementById('content');
+    let currentPage = 1;
+
+    async function loadList(page) {
+      currentPage = page;
+      content.innerHTML = '<div class="loading-spinner"><div class="spinner-ring"></div><span class="loading-text">加载中...</span></div>';
+
+      try {
+        const data = await api.reviews.list(page);
+        if (!data.list || data.list.length === 0) {
+          content.innerHTML = `
+            <div class="state-container">
+              <div class="state-icon">📋</div>
+              <div class="state-title">暂无审核任务</div>
+              <div class="state-desc">上传招标文件和投标文件后，即可创建审核任务</div>
+              <a href="/upload.html" class="btn btn-primary">新建审核</a>
+            </div>`;
+          return;
+        }
+
+        let html = `
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>招标文件</th>
+                  <th>投标文件</th>
+                  <th>投标截止日</th>
+                  <th>状态</th>
+                  <th>创建时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>`;
+
+        for (const item of data.list) {
+          const actions = [];
+          if (item.status === 'completed') {
+            actions.push(`<a href="/review.html?id=${item.id}" class="btn btn-sm btn-primary">查看结果</a>`);
+          } else if (item.status === 'failed') {
+            actions.push(`<button class="btn btn-sm btn-danger" onclick="retryTask(${item.id})">重试</button>`);
+          } else {
+            actions.push(`<span style="color:var(--text-tertiary);font-size:13px">处理中...</span>`);
+          }
+
+          html += `
+            <tr>
+              <td>${item.id}</td>
+              <td>${escapeHtml(item.tenderFileName)}</td>
+              <td>${escapeHtml(item.bidFileName)}</td>
+              <td>${item.bidDeadline}</td>
+              <td>${statusBadge(item.status)}</td>
+              <td>${formatDate(item.createdAt)}</td>
+              <td>${actions.join(' ')}</td>
+            </tr>`;
+        }
+
+        html += '</tbody></table></div>';
+
+        if (data.total > data.pageSize) {
+          const totalPages = Math.ceil(data.total / data.pageSize);
+          html += '<div class="pagination">';
+          html += `<button ${page <= 1 ? 'disabled' : ''} onclick="loadList(${page - 1})">上一页</button>`;
+          for (let i = 1; i <= totalPages; i++) {
+            html += `<button class="${i === page ? 'active' : ''}" onclick="loadList(${i})">${i}</button>`;
+          }
+          html += `<button ${page >= totalPages ? 'disabled' : ''} onclick="loadList(${page + 1})">下一页</button>`;
+          html += '</div>';
+        }
+
+        content.innerHTML = html;
+      } catch (err) {
+        content.innerHTML = `
+          <div class="alert alert-danger">
+            加载失败：${escapeHtml(err.message)}
+            <button class="btn btn-sm btn-outline" style="margin-left:auto" onclick="loadList(${page})">重试</button>
+          </div>`;
+      }
+    }
+
+    async function retryTask(taskId) {
+      try {
+        await api.reviews.retry(taskId);
+        showToast('任务已重新提交', 'success');
+        loadList(currentPage);
+      } catch (err) {
+        showToast(err.message || '重试失败', 'error');
+      }
+    }
+
+    loadList(1);
+
+    let pollTimer;
+    function startPolling() {
+      pollTimer = setInterval(() => loadList(currentPage), 5000);
+    }
+    function stopPolling() {
+      clearInterval(pollTimer);
+    }
+    startPolling();
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopPolling(); else startPolling();
+    });
+  </script>
+</body>
+</html>

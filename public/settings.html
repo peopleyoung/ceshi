@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>系统配置 - 标书审核平台</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="app-header" id="app-header"></header>
+
+  <div class="container">
+    <h1 class="page-title">系统配置</h1>
+
+    <div id="content">
+      <div class="loading-spinner">
+        <div class="spinner-ring"></div>
+        <span class="loading-text">加载中...</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error('unauthorized');
+    renderHeader('settings');
+
+    const content = document.getElementById('content');
+
+    async function loadConfig() {
+      try {
+        const config = await api.config.getAi();
+        renderConfig(config);
+      } catch (err) {
+        content.innerHTML = `
+          <div class="alert alert-danger">
+            加载配置失败：${escapeHtml(err.message)}
+            <button class="btn btn-sm btn-outline" style="margin-left:auto" onclick="loadConfig()">重试</button>
+          </div>`;
+      }
+    }
+
+    function renderConfig(config) {
+      content.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">AI 大模型配置</h2>
+          </div>
+          <div class="alert alert-info" style="margin-bottom:20px">
+            配置 AI 大模型后，系统才能进行自动审核。API Key 不会明文显示。
+          </div>
+          <form id="config-form">
+            <div class="form-group">
+              <label for="endpoint">API 地址</label>
+              <input type="url" id="endpoint" value="${escapeHtml(config.endpoint || '')}" required placeholder="https://api.openai.com/v1">
+            </div>
+            <div class="form-group">
+              <label for="modelName">模型名称</label>
+              <input type="text" id="modelName" value="${escapeHtml(config.modelName || '')}" required placeholder="gpt-4-turbo">
+            </div>
+            <div class="form-group">
+              <label for="apiKey">API Key</label>
+              <input type="password" id="apiKey" placeholder="留空则不修改当前 Key" minlength="10">
+              <div class="hint">当前值：${escapeHtml(config.apiKey || '未设置')}</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button type="submit" class="btn btn-primary" id="save-btn">保存配置</button>
+              <button type="button" class="btn btn-outline" id="reset-btn">恢复默认</button>
+            </div>
+          </form>
+        </div>`;
+
+      document.getElementById('config-form').addEventListener('submit', handleSave);
+      document.getElementById('reset-btn').addEventListener('click', handleReset);
+    }
+
+    async function handleSave(e) {
+      e.preventDefault();
+      const saveBtn = document.getElementById('save-btn');
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="spinner"></span> 保存中...';
+
+      const body = {
+        endpoint: document.getElementById('endpoint').value.trim(),
+        modelName: document.getElementById('modelName').value.trim(),
+      };
+
+      const apiKey = document.getElementById('apiKey').value;
+      if (apiKey) body.apiKey = apiKey;
+
+      try {
+        await api.config.updateAi(body);
+        showToast('配置已保存', 'success');
+        loadConfig();
+      } catch (err) {
+        showToast(err.message || '保存失败', 'error');
+        saveBtn.disabled = false;
+        saveBtn.textContent = '保存配置';
+      }
+    }
+
+    async function handleReset() {
+      if (!confirm('确定要恢复默认配置吗？当前 API Key 将被清除。')) return;
+
+      try {
+        await api.config.resetAi();
+        showToast('已恢复默认配置', 'success');
+        loadConfig();
+      } catch (err) {
+        showToast(err.message || '重置失败', 'error');
+      }
+    }
+
+    loadConfig();
+  </script>
+</body>
+</html>

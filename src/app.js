@@ -1,3 +1,4 @@
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const config = require('./config');
@@ -33,6 +34,8 @@ async function startServer() {
   app.get('/api/health', (_req, res) => {
     res.json({ code: 0, message: 'ok', timestamp: new Date().toISOString() });
   });
+
+  app.use(express.static(path.join(__dirname, '..', 'public')));
 
   app.use((_req, res) => {
     res.status(404).json({ code: 404, message: '接口不存在' });
