@@ -32,5 +32,10 @@ export default tseslint.config(
     files: ['vite.config.ts', 'eslint.config.js'],
     languageOptions: { globals: { ...globals.node } },
   },
+  {
+    // QA 独立测试脚手架（qa/）：Node 运行 + page.evaluate 内浏览器上下文
+    files: ['qa/**/*.{mjs,ts}'],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
+  },
   prettier,
 )

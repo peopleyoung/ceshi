@@ -1,0 +1,13 @@
+{
+  "name": "ceshi-qa-harness",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "测试工程师独立交付：被测实现 e4f04ab 的 QA 用例与浏览器冒烟脚本（不参与应用构建）",
+  "scripts": {
+    "e2e": "node e2e/smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}
