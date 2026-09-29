@@ -1,6 +1,6 @@
 {
   "name": "bid-review-platform",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "标书审核平台后端服务",
   "main": "src/app.js",
   "scripts": {
@@ -22,8 +22,10 @@
     "jsonwebtoken": "^9.0.3",
     "mammoth": "^1.13.0",
     "multer": "^2.4.0",
+    "pdf-parse": "^2.4.5",
     "pdfkit": "^0.20.2",
     "sql.js": "^1.14.2",
+    "tesseract.js": "^7.0.0",
     "uuid": "^14.0.2"
   }
 }

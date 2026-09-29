@@ -24,7 +24,7 @@ const storage = multer.diskStorage({
 function fileFilter(_req, file, cb) {
   const ext = path.extname(file.originalname).toLowerCase();
   if (!config.allowedFileTypes.includes(ext)) {
-    return cb(new Error('仅支持 PDF、DOC、DOCX 格式'));
+    return cb(new Error('仅支持 PDF、DOC、DOCX、PNG、JPG 格式'));
   }
   cb(null, true);
 }
@@ -39,6 +39,7 @@ function getFileType(ext) {
   if (ext === '.pdf') return 'pdf';
   if (ext === '.doc') return 'doc';
   if (ext === '.docx') return 'docx';
+  if (ext === '.png' || ext === '.jpg' || ext === '.jpeg') return 'image';
   return 'unknown';
 }
 

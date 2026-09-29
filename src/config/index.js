@@ -7,7 +7,7 @@ const config = {
   dbPath: path.resolve(__dirname, '../../data/db/app.db'),
   uploadDir: path.resolve(__dirname, '../../data/uploads'),
   maxFileSize: 50 * 1024 * 1024,
-  allowedFileTypes: ['.pdf', '.doc', '.docx'],
+  allowedFileTypes: ['.pdf', '.doc', '.docx', '.png', '.jpg', '.jpeg'],
   defaultAiConfig: {
     endpoint: 'https://api.openai.com/v1',
     modelName: 'gpt-4-turbo',

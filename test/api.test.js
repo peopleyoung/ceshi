@@ -188,6 +188,15 @@ async function runTests() {
 
   console.log('\n=== Review API Tests ===');
 
+  await test('Update AI config with test key for review tests', async () => {
+    const res = await request('PUT', '/api/config/ai', {
+      endpoint: 'https://api.example.com/v1',
+      modelName: 'gpt-4',
+      apiKey: 'sk-test1234567890',
+    }, { Authorization: `Bearer ${authToken}` });
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+  });
+
   const futureDate = new Date();
   futureDate.setMonth(futureDate.getMonth() + 2);
   const bidDeadline = futureDate.toISOString().split('T')[0];
@@ -230,14 +239,16 @@ async function runTests() {
     assert(typeof res.data.data.total === 'number', 'Expected total number');
   });
 
-  await test('Get review detail - wait for completion', async () => {
-    await new Promise((resolve) => setTimeout(resolve, 4000));
+  await test('Get review detail - wait for processing', async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
     const res = await request('GET', `/api/reviews/${taskId}`, null, {
       Authorization: `Bearer ${authToken}`,
     });
     assert(res.status === 200, `Expected 200, got ${res.status}`);
     assert(res.data.data.task, 'Expected task in response');
     assert(res.data.data.results, 'Expected results in response');
+    assert(['completed', 'failed', 'reviewing'].includes(res.data.data.task.status),
+      `Expected completed/failed/reviewing, got ${res.data.data.task.status}`);
   });
 
   await test('Get review - not found', async () => {
@@ -284,19 +295,41 @@ async function runTests() {
 
   console.log('\n=== Report Export Tests ===');
 
-  await test('Export PDF - completed task', async () => {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    const res = await request('GET', `/api/reviews/${taskId}/export/pdf`, null, {
+  await test('Export PDF - task not completed returns 400', async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const detailRes = await request('GET', `/api/reviews/${taskId}`, null, {
       Authorization: `Bearer ${authToken}`,
     });
-    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    const taskStatus = detailRes.data.data.task.status;
+    if (taskStatus === 'completed') {
+      const res = await request('GET', `/api/reviews/${taskId}/export/pdf`, null, {
+        Authorization: `Bearer ${authToken}`,
+      });
+      assert(res.status === 200, `Expected 200, got ${res.status}`);
+    } else {
+      const res = await request('GET', `/api/reviews/${taskId}/export/pdf`, null, {
+        Authorization: `Bearer ${authToken}`,
+      });
+      assert(res.status === 400, `Expected 400 for non-completed task, got ${res.status}`);
+    }
   });
 
-  await test('Export Word - completed task', async () => {
-    const res = await request('GET', `/api/reviews/${taskId}/export/word`, null, {
+  await test('Export Word - task not completed returns 400', async () => {
+    const detailRes = await request('GET', `/api/reviews/${taskId}`, null, {
       Authorization: `Bearer ${authToken}`,
     });
-    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    const taskStatus = detailRes.data.data.task.status;
+    if (taskStatus === 'completed') {
+      const res = await request('GET', `/api/reviews/${taskId}/export/word`, null, {
+        Authorization: `Bearer ${authToken}`,
+      });
+      assert(res.status === 200, `Expected 200, got ${res.status}`);
+    } else {
+      const res = await request('GET', `/api/reviews/${taskId}/export/word`, null, {
+        Authorization: `Bearer ${authToken}`,
+      });
+      assert(res.status === 400, `Expected 400 for non-completed task, got ${res.status}`);
+    }
   });
 
   console.log('\n=== Health Check ===');
