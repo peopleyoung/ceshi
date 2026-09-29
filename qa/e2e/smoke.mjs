@@ -9,12 +9,14 @@
  *
  * 运行：
  *   cd qa && npm install && npx playwright install firefox
- *   node e2e/smoke.mjs --dist ../dist --out <evidence-dir>
+ *   node e2e/smoke.mjs --out <evidence-dir>
+ *   （--dist 缺省指向仓库根 dist/，从任意目录运行均可）
  */
 import { createServer } from 'node:http'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { extname, join, resolve, sep } from 'node:path'
+import { dirname, extname, join, resolve, sep } from 'node:path'
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 import { chromium, firefox } from 'playwright'
 
 const args = process.argv.slice(2)
@@ -23,7 +25,8 @@ function argValue(name, fallback) {
   return index >= 0 && args[index + 1] ? args[index + 1] : fallback
 }
 
-const DIST_DIR = resolve(argValue('dist', '../dist'))
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
+const DIST_DIR = resolve(argValue('dist', resolve(SCRIPT_DIR, '..', '..', 'dist')))
 const OUT_DIR = resolve(argValue('out', 'qa-e2e-output'))
 const SHOT_DIR = join(OUT_DIR, 'screenshots')
 const PORT = Number(argValue('port', '4399'))
@@ -94,13 +97,24 @@ async function observeBoard(page) {
       }
       const context = canvas.getContext('2d')
       const { width, height } = canvas
+      // 单次整幅读回 + JS 采样：Firefox 下单像素 getImageData 每格调用开销高，整幅读回等价且快一个量级
+      let pixels
+      try {
+        pixels = context.getImageData(0, 0, width, height).data
+      } catch (error) {
+        return { error: `canvas-readback-failed: ${String(error)}` }
+      }
+      const at = (x, y) => {
+        const index = (y * width + x) * 4
+        return [pixels[index], pixels[index + 1], pixels[index + 2]]
+      }
       const cellW = width / cols
       const cellH = height / rows
       const tolerance = 16
-      const matches = (r, g, b, target) =>
-        Math.abs(r - target[0]) <= tolerance &&
-        Math.abs(g - target[1]) <= tolerance &&
-        Math.abs(b - target[2]) <= tolerance
+      const matches = (rgb, target) =>
+        Math.abs(rgb[0] - target[0]) <= tolerance &&
+        Math.abs(rgb[1] - target[1]) <= tolerance &&
+        Math.abs(rgb[2] - target[2]) <= tolerance
 
       const classify = (cellX, cellY) => {
         let head = 0
@@ -110,14 +124,11 @@ async function observeBoard(page) {
           for (const sy of [0.32, 0.5, 0.68]) {
             const px = Math.min(width - 1, Math.max(0, Math.round((cellX + sx) * cellW)))
             const py = Math.min(height - 1, Math.max(0, Math.round((cellY + sy) * cellH)))
-            const data = context.getImageData(px, py, 1, 1).data
-            if (matches(data[0], data[1], data[2], palette.head)) head += 1
-            else if (
-              matches(data[0], data[1], data[2], palette.body) ||
-              matches(data[0], data[1], data[2], palette.bodyAlt)
-            ) {
+            const rgb = at(px, py)
+            if (matches(rgb, palette.head)) head += 1
+            else if (matches(rgb, palette.body) || matches(rgb, palette.bodyAlt)) {
               body += 1
-            } else if (matches(data[0], data[1], data[2], palette.food)) food += 1
+            } else if (matches(rgb, palette.food)) food += 1
           }
         }
         if (head >= 4) return 'head'
@@ -445,6 +456,7 @@ async function runScenario(browserName, viewport) {
   const checks = new CheckList(browserName, viewport)
   const browserType = browserName === 'chromium' ? chromium : firefox
   const browser = await browserType.launch({ headless: true })
+  checks.browserVersion = browser.version()
   const context = await browser.newContext({
     viewport,
     deviceScaleFactor: viewport.width <= 400 ? 2 : 1,
@@ -936,6 +948,7 @@ async function main() {
       }
       results.push({
         browser: entry.browser,
+        browserVersion: checks.browserVersion ?? null,
         viewport: entry.viewport,
         total: checks.items.length,
         passed: checks.items.length - failed.length,
@@ -947,9 +960,25 @@ async function main() {
     server.close()
   }
 
+  let playwrightVersion = 'unknown'
+  try {
+    const qaPackage = JSON.parse(
+      await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+    )
+    playwrightVersion = qaPackage.devDependencies?.playwright ?? 'unknown'
+  } catch {
+    // 版本读取失败不影响冒烟结果
+  }
+
   const summary = {
     generatedAt: new Date().toISOString(),
     target: 'dist/ build of agents/frontend-developer @ e4f04ab8a463bfdad7f8272e6609f0d12a7c3157',
+    environment: {
+      node: process.version,
+      platform: `${process.platform} ${process.arch}`,
+      playwright: playwrightVersion,
+      distDir: DIST_DIR,
+    },
     totalChecks: results.reduce((sum, entry) => sum + entry.total, 0),
     failedChecks: results.reduce((sum, entry) => sum + entry.failed, 0),
     runs: results,
